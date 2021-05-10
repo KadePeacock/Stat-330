@@ -1,0 +1,326 @@
+---
+title: "HW 8"
+output: pdf_document
+author: "Kade Peacock"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+diabetes <- read.table("Diabetes.txt", header = T)
+library(bestglm)
+library(car)
+library(pROC)
+```
+
+```{r}
+flag <- which(apply(diabetes[,2:6],1,function(x){ any(x == 0 )})) 
+diabetes_use <- diabetes[-flag,]
+```
+
+## Question 1
+
+Diabetes is a problem with your body that can cause a variety of complications that will negatively impact a person's life. In order to minimize the damage, it is beneficial to start treatment before the symptomes become severe rather than try to cure them after they become a problem. At the same time though, you don't want to waste time, money and resources treating someone who doesn't actually have diabetes "just in case". For these 2 reasons, It is ideal to try to find a way to predict if someone will develop diabetes based on other measurable factors so that we can determine who should get treatment/who we should keep an eye on because they are in the early stages of diabetes and who probably won't have to deal with those problems. That's what we're going to do with our analysis: develop a model that is able to accurately predict if someone has or will develop diabetes based on oterh measurable factors.
+
+## Question 2 
+
+```{r}
+scatter.smooth(diabetes_use$pregnant,diabetes_use$diabetes,xlab="Pregnant",ylab="Diabetes",pch=19)
+scatter.smooth(diabetes_use$glucose,diabetes_use$diabetes,xlab="Glucose",ylab="Diabetes",pch=19)
+scatter.smooth(diabetes_use$diastolic,diabetes_use$diabetes,xlab="Diastolic",ylab="Diabetes",pch=19)
+scatter.smooth(diabetes_use$triceps,diabetes_use$diabetes,xlab="Triceps",ylab="Diabetes",pch=19)
+scatter.smooth(diabetes_use$insulin,diabetes_use$diabetes,xlab="Insulin",ylab="Diabetes",pch=19)
+scatter.smooth(diabetes_use$bmi,diabetes_use$diabetes,xlab="BMI",ylab="Diabetes",pch=19)
+scatter.smooth(diabetes_use$pedigree,diabetes_use$diabetes,xlab="Pedigree",ylab="Diabetes",pch=19)
+scatter.smooth(diabetes_use$age,diabetes_use$diabetes,xlab="Age",ylab="Diabetes",pch=19)
+```
+
+\textbf{Trends:}
+
+Pregnant: On average, diabetes increases as number of pregnancies increases. After 7 pregnancies, the chance of having diabetes passes 50%.
+
+Glucose: On average, diabetes increases as glucose levels increase. After a glucose level of about 140, the chance of having diabetes passes 50%. After a glucose level of aboutt 180, the chance of having diabetes passes 100%.
+
+Diastolic: On average, diabetes increases as diastolic blood pressure increases. After a blood pressure of about 90 mm Hg, the chance of having diabetes passes 50%. The maximum influence blood pressure has is about 80% (so it's not very influential)
+
+Triceps: On average, diabetes increases as Triceps skin fold thickness increases. After Triceps skin fold thickness of about 50 mm, the chance of having diabetes passes 50%. The maximum influence Triceps skin fold thickness has is about 60% (so it's not very influential)
+
+Insulin: On average, diabetes increases as 2 hour serum insulin increases. Once insulin passes about 250, the chance of having diabetes passes 50%. The maximum influence 2 hour serum insulin has is about 70% (so it's not very influential)
+
+BMI: On average, diabetes increases as BMI increases. Once BMI passes about 45, the chance of having diabetes passes 50%.
+
+Pedigree: On average, diabetes increases as pedigree increases. Once pedigree passes about 1.25, the chance of having diabetes passes 50%.
+
+Age: On average, diabetes increases as age increases. Once age passes about 40 years, the chance of having diabetes passes 50%.
+
+Traditional Multiple Linear Regression methods are not suitable for this problem because diabetes(the response variable) is binary(categorical).
+
+## Question 3 
+
+```{r}
+
+logistic_reg_model = glm(diabetes~pregnant + glucose + diastolic + triceps + insulin +
+                           bmi + pedigree + age, data=diabetes_use,family="binomial")
+
+summary(logistic_reg_model)
+vif(logistic_reg_model)
+
+
+var.select = bestglm(diabetes_use,IC="AIC",family=binomial,
+                     method = "exhaustive")
+var.select$BestModel
+
+best_model = glm(diabetes ~ glucose + bmi + pedigree + age, 
+                 data=diabetes_use, family="binomial")
+
+summary(best_model)
+
+best_model$coefficients                   
+round(exp(best_model$coefficients),3)     
+100 * (exp(best_model$coefficients) - 1) 
+
+```
+
+```{r}
+plot(var.select$Subsets$AIC, type = "b", pch = 19, xlab = "# of vars", ylab = "BIC")
+points(10, 27.00166, col="red", pch = 19)
+summary(best_model)
+confint(best_model)
+```
+
+
+## Question 4
+
+$$
+log \left( \frac{p_i}{1-p_i} \right) = \beta_0 + \sum_{j=1}^{J} {x_{ij}\beta_j}
+$$
+
+$$
+log \left( \frac{p_i}{1-p_i} \right) =\beta_0 + \beta_1(Pregnant)+\beta_2(Glucose) + \beta_3(BMI) + \beta_4(Pedigree) + \beta_5(Age)
+$$
+
+\textbf{Assumptions:}
+
+* Linear in log odds 
+
+* Independence 
+
+* Bernoulli distributed 
+
+* Model describes all observations
+
+
+\textbf{Linearity:}
+
+In order to demonstrate linearity in log odds, we will look at the scatter plots we made originally as well as some AV plots.
+
+```{r}
+car::avPlots(best_model)
+```
+
+In looking at the scatter plots, we can see that the Glucose, BMI and Pedigree plots demonstrate very linear relationships. Age is the only covariate that proposes a problem as it is linear for the younger ages but curves right at the top. In looking at the AV plots, we can see that all of the relationships who linear trends, this time including age. For these reasons, we can conclude that the linearity assumption is met. 
+
+\textbf{Independence:}
+    
+It's reasonable to assume independence because diabetes isn't contagious. One person having it will not affect if another individual has it or not. Therefore the independence assumption is met.
+
+\textbf{Bernoulli:}
+
+There is no other probability model that you can come up with when you have binary data. We know we are working with binary data because we are looking at the probability of someone either having diabetes or not having it. No other model applies because you can't have 25% diabetes, you either do or you don't. Therefore the Bernoulli assumption is met.
+
+
+
+
+## Question 5
+
+\begin{align}
+\widehat{y}&=-10.09+0.036(Glucose)+0.074(BMI)+1.087(Pedigree)+0.053(Age)
+\end{align}
+
+```{r}
+my_est=coef(best_model)
+my_ci=confint(best_model)
+knitr::kable(cbind("Estimate" = my_est, my_ci))
+```
+
+
+According to our model, with every year a woman ages the chance of getting Type 2 diabetes increases by 0.053%. 
+
+## Question 6
+
+```{r}
+pred.probs = predict.glm(best_model,type="response")
+cutoff = 0.5 
+
+preds = pred.probs > cutoff                   
+preds = 1 * (pred.probs > cutoff)             
+preds = ifelse(pred.probs > cutoff,1,0)         
+
+conf.mat = table(preds,diabetes_use$diabetes)           
+conf.mat
+
+misclass_rate = 1 - sum(diag(conf.mat)) / sum(conf.mat)  
+misclass_rate      
+
+
+n_cutoff = 100
+cutoff = seq(0.05,0.95,length=n_cutoff)
+misclass_rate = rep(0,n_cutoff)
+sensitivity = rep(0,n_cutoff)
+specificity = rep(0,n_cutoff)
+
+for(i in 1:n_cutoff){
+  preds = 1 * (pred.probs > cutoff[i])              
+  conf.mat = table(preds,diabetes_use$diabetes)                  
+  misclass_rate[i] = 1 - sum(diag(conf.mat))/sum(conf.mat)   
+  sensitivity[i] = conf.mat[2,2] / (conf.mat[2,2] + conf.mat[1,2]) 
+  specificity[i] = conf.mat[1,1] / (conf.mat[1,1] + conf.mat[2,1]) 
+}
+
+plot(cutoff,misclass_rate,type="l",ylab="Misclassification Rate",xlab="Cutoff")
+abline(v = cutoff[which.min(misclass_rate)])
+
+
+cutoff[which.min(misclass_rate)]  
+```
+
+## Question 7
+
+```{r}
+cutoff_use = cutoff[which.min(misclass_rate)]
+pred_use = pred.probs > cutoff_use
+conf.mat = table(pred_use,diabetes_use$diabetes)
+conf.mat
+
+
+addmargins(table(pred_use,diabetes_use$diabetes))
+
+# pseudo R^2
+1 - best_model$deviance/best_model$null.deviance
+
+# AUC
+my.roc = roc(diabetes_use$diabetes,pred.probs)
+plot(my.roc,legacy.axes=TRUE)
+auc(my.roc)
+
+
+# sensitivity
+
+conf.mat[2,2] / (conf.mat[2,2] + conf.mat[1,2])   
+
+# specificity 
+
+conf.mat[1,1] / (conf.mat[1,1] + conf.mat[2,1])   
+
+#  Positive predictive value
+
+conf.mat[2,2] / (conf.mat[2,2] + conf.mat[2,1])   
+
+#  Negative predictive value
+
+conf.mat[1,1] / (conf.mat[1,1] + conf.mat[1,2])   
+
+# percent predicted correctly
+
+sum(diag(conf.mat))/sum(conf.mat)
+```
+
+The sensitivity is 0.6615. This means that out of all true cases of diabetes, approximately 66% were predicted cases of diabetes. 
+
+The specificity is 0.8778. This means that out of all true cases of non-diabetes, approximately 88% were predicted cases of non-diabetes. 
+
+The positive predictive value is 0.7288. This means that out of all predicted cases of diabetes, approximately 73% were true cases of diabetes. 
+
+The negative predictive value is 0.8394. This means that out of all predicted cases of non-diabetes, approximately 84% were true cases of non-diabetes. 
+
+Given that the approximately 81% of patients were predicted correctly, the model fits the data fairly well. 
+
+## Question 8 
+
+```{r}
+n.test = 100
+
+test.obs = sample(1:nrow(diabetes_use),n.test)
+
+test.data = diabetes_use[test.obs,]
+train.data = diabetes_use[-test.obs,]
+
+train.mod = glm(diabetes ~ glucose + age + pedigree + bmi, data=diabetes_use, 
+                family="binomial")
+
+
+test.preds = predict.glm(train.mod,newdata = test.data, type="response")
+
+test.class = ifelse(test.preds > 0.5, 1, 0)
+
+conf.mat = table(test.data$diabetes,test.class)
+
+conf.mat = addmargins(conf.mat)
+
+conf.mat
+
+auc(roc(test.data$diabetes,test.preds)) 
+
+### sensitivity
+
+conf.mat[2,2] / (conf.mat[2,2] + conf.mat[1,2]) ## TP/(TP + FN)
+
+### specificity 
+
+conf.mat[1,1] / (conf.mat[1,1] + conf.mat[2,1]) ## TN/(FP + TN)
+
+### Positive predictive value
+
+conf.mat[2,2] / (conf.mat[2,2] + conf.mat[2,1]) ## TP/(FP + TP)
+
+### Negative predictive value
+
+conf.mat[1,1] / (conf.mat[1,1] + conf.mat[1,2]) ## TN/(FN + TN)
+
+### percent predicted correctly
+
+sum(diag(conf.mat))/sum(conf.mat)
+```
+
+The sensitivity is 0.7667. This means that out of all true cases of diabetes, approximately 77% were predicted cases of diabetes. 
+
+The specificity is 0.8429. This means that out of all true cases of non-diabetes, approximately 84% were predicted cases of non-diabetes. 
+
+The positive predictive value is 0.6765. This means that out of all predicted cases of diabetes, approximately 68% were true cases of diabetes. 
+
+The negative predictive value is 0.8939. This means that out of all predicted cases of non-diabetes, approximately 89% were true cases of non-diabetes. 
+
+Given that the approximately 46% of patients were predicted correctly, the model gives us a general idea but isn't very reliable.
+
+## Question 9
+
+```{r}
+pred_xb = predict.glm(best_model,
+                      newdata = list(pregnant = 1, glucose = 90, diastolic = 62, 
+                                     triceps = 18, insulin = 59, bmi = 25.1, 
+                                     pedigree = 1.268, age = 25), se.fit=TRUE)
+
+pred_xb
+
+pred_xb$fit
+
+pred_xb$fit + c(-1,1)* 1.96*pred_xb$se.fit
+pred_xbupper1 = pred_xb$fit + 1.96*pred_xb$se.fit
+pred_xblower1 = pred_xb$fit - 1.96*pred_xb$se.fit
+pred_xbupper1 
+pred_xblower1 
+
+
+conf_int = c(pred_xblower1,pred_xbupper1)
+
+exp(conf_int)/(1 + exp(conf_int))
+best_model$family$linkinv(conf_int)
+
+conf_interval_prob = best_model$family$linkinv(conf_int)
+
+conf_interval_prob
+```
+
+According to the model, we are 95% confident that this patient has between a 4.25% and 19.59% chance of having diabetes. Given these values, this patient is most likely diabetes free.

@@ -1,0 +1,464 @@
+---
+title: "Stat 330 Final"
+output: pdf_document
+author: "Kade Peacock" 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(bestglm)
+library(car)
+library(pROC)
+library(knitr)
+```
+
+```{r, include=FALSE}
+dat = read.csv("Titanic_complete.csv", stringsAsFactors = TRUE)
+dat$Pclass = factor (dat$Pclass)
+attach(dat)
+```
+
+## Question 1
+
+The response variable is the likelihood of survival on the Titanic. 
+
+The covariates are: 
+
+* Pclass - Ticket Class
+
+* Sex
+
+* Age in years
+
+* SibSp - Number of siblings / spouses aboard
+
+* Parch - Number of parents / children aboard
+
+* Passenger fare
+
+* Port of Embarkation 
+
+## Question 2
+
+The goals of the analysis is to use my given data to build a model that can be used to infer which factors influenced the likelihood or probability of survival for passengers of the Titanic. 
+
+Logistic regression is the appropriate modeling framework because I am given both categorical and quantitative data for a binary response variable.
+
+
+## Question 3
+
+When I run the BIC, R determines that all of the covariates should be used in the model. I chose to use BIC because, generally, BIC is used to make inferences with the data while AIC is used to make predictions with the data. As stated in the prompt my goal was to make inferences with my data, so BIC was a better fit for my goals.
+
+This reduces the number of required covariates while maximizing the fit of the model to the data. For example, removing a covariate from the BIC and replacing it with another would result in a less accurate model. The amount of given data is manageable enough to use an exhaustive method, rather than forward or backward. These two options are less computationally intensive, but exhaustive provides more comprehensive results with minimal cost. 
+
+```{r, include=FALSE}
+logistic_reg_model = glm(Survived~Pclass + Sex + Age + SibSp + Parch +
+                           Fare + Embarked, data=dat,family="binomial")
+
+summary(logistic_reg_model)
+vif(logistic_reg_model)
+
+
+var.select = bestglm(dat,IC="BIC",family=binomial,
+                     method = "exhaustive")
+var.select$BestModel
+
+best_model = glm(Survived ~ Pclass + Sex + Age + SibSp, 
+                 data=dat, family="binomial")
+
+summary(best_model)
+
+best_model$coefficients                   
+round(exp(best_model$coefficients),3)     
+100 * (exp(best_model$coefficients) - 1) 
+```
+
+$$
+log \left( \frac{p_i}{1-p_i} \right)  =  \beta_0 + \beta_1I(Group = Pclass2) + \beta_2I(Group = Pclass3) + \\ 
+\beta_3I(Group = Male) + \beta_4(Age) + \beta_5(SibSp) \\
+$$
+
+$$
+y_i \overset{ind}{\sim} \mathrm{Pois}(\mu_i)
+$$
+
+## Question 4
+
+
+\textbf{Assumptions:}
+
+* Linear in log odds 
+
+* Independence 
+
+* Bernoulli distributed 
+
+* Model describes all observations
+
+
+\textbf{Linearity:}
+
+In order to demonstrate linearity in log odds, I will look at the scatter plots I made originally as well as some AV plots.
+
+```{r, echo=FALSE, warning=FALSE}
+avPlots(best_model)
+scatter.smooth(Pclass,Survived,xlab="Pclass",ylab="Survived",pch=19)
+scatter.smooth(Sex,Survived,xlab="Sex",ylab="Survived",pch=19)
+scatter.smooth(Age,Survived,xlab="Age",ylab="Survived",pch=19)
+scatter.smooth(SibSp,Survived,xlab="SibSp",ylab="Survived",pch=19)
+```
+
+In looking at the scatter plots, I can see that the Pclass, Sex, Age, and SibSp plots demonstrate linear relationships. In looking at the AV plots, I can see that all of the relationships who linear trends. For these reasons, I can conclude that the linearity assumption is met. 
+
+\textbf{Independence:}
+
+It is possible that the survival of one passenger was dependent on the survival (or peril) of another. For instance, limited life rafts or sacrifice for loved ones could potentially detract from independence. However, for the sake of simplicity I will assume that the independence assumption is met. 
+
+\textbf{Bernoulli:}
+
+There is no other probability model that you can come up with when you have binary data. I know I am working with binary data because I am looking at the probability of someone either having diabetes or not having it. No other model applies because you can't have 25% Survived, you either did or you didn't. Therefore the Bernoulli assumption is met.
+
+\textbf{Model describes all observations:}
+
+The model includes all given observations, which means that any trends or conclusions drawn from the model are a result of every available observation. For this reason I will assume that this assumption is met. 
+
+
+## Question 5 
+
+```{r, include=FALSE}
+model_glm = glm(Survived ~ Pclass + Sex + Age + SibSp, 
+                data = dat , family = binomial )
+BIC(model_glm)
+model_glm_poly = glm(Survived ~ Pclass + Sex + poly(Age,3) + SibSp, 
+                     data = dat , family = binomial)
+BIC(model_glm_poly)
+model_glm_int = glm(Survived ~ Pclass + Sex + Age + SibSp + Sex*Pclass, 
+                    data = dat , family = binomial )
+BIC(model_glm_int)
+model_glm_int2 = glm(Survived ~ Pclass + Sex + Age + SibSp + Pclass*Sex + Age*Sex, 
+                     data = dat , family = binomial )
+BIC(model_glm_int2)
+```
+
+The model that uses Pclass, Sex, Age, SibSp as covariates and an interaction between Sex and Pclass is the best in terms of BIC since it returns the smallest value (654.87).  
+
+## Question 6
+
+```{r, include=FALSE}
+pred.probs = predict.glm(model_glm_int,type="response")
+cutoff = 0.5 
+
+preds = pred.probs > cutoff                   
+preds = 1 * (pred.probs > cutoff)             
+preds = ifelse(pred.probs > cutoff,1,0)         
+
+conf.mat = table(preds,dat$Survived)           
+
+
+misclass_rate = 1 - sum(diag(conf.mat)) / sum(conf.mat)  
+ 
+
+
+n_cutoff = 100
+cutoff = seq(0.05,0.95,length=n_cutoff)
+misclass_rate = rep(0,n_cutoff)
+sensitivity = rep(0,n_cutoff)
+specificity = rep(0,n_cutoff)
+
+for(i in 1:n_cutoff){
+preds = 1 * (pred.probs > cutoff[i])              
+conf.mat = table(preds,dat$Survived)                  
+misclass_rate[i] = 1 - sum(diag(conf.mat))/sum(conf.mat)   
+sensitivity[i] = conf.mat[2,2] / (conf.mat[2,2] + conf.mat[1,2]) 
+specificity[i] = conf.mat[1,1] / (conf.mat[1,1] + conf.mat[2,1]) 
+}
+
+cutoff[which.min(misclass_rate)]  
+
+# sensitivity
+
+conf.mat[2,2] / (conf.mat[2,2] + conf.mat[1,2])   
+
+# specificity 
+
+conf.mat[1,1] / (conf.mat[1,1] + conf.mat[2,1]) 
+
+### Brier Score
+
+mean((pred.probs - dat$Survived)^2)
+
+# AUC
+my.roc = roc(dat$Survived,pred.probs)
+auc(my.roc)
+```
+
+Misclassification rate using a cutoff probability of 0.5: \textbf{0.459}
+
+Sensitivity using a cutoff probability of 0.5: \textbf{0.288}
+
+Specificity using a cutoff probability of 0.5: \textbf{0.993}
+
+Brier Score: \textbf{0.133}
+
+AUC: \textbf{0.869}
+
+## Question 7 
+
+This makes the Age data fitted to a parabola to account for the fact that there are many less very young passengers and very old passengers than those in the middle. In essence, the extremes are balanced to be more in line with the rest of the population in between. 
+
+## Question 8
+
+Table 2 has z-statistics rather than t-statistics because it is concened with determining probablities rather than means. Additionally, the number of passengers on the Titanic is relatively small so we do not need to use smaller samples to estimate t-statistics about entire populations.
+
+## Question 9 
+
+$\hat{\beta_0}$ is the estimated probability of survival on the Titanic of a female with a class 1 ticket and a value of 0 for the remaining the covariates. This is not really feasible in reality since most passengers have an age or number of spouses greater 0, but it can be useful for determining how much certain covariates impact the probability of survival. Essentially, this is the y-intercept of the data. 
+
+## Question 10
+
+```{r, include=FALSE}
+CI = confint(model_glm_int2) 
+round(exp(CI[6,]),3)    
+```
+
+I am 95% confident that the probability of Titanic survival for a passenger decreases by between \textbf{.545}% and \textbf{.867}% for every sibling or spouse on board with that passenger. 
+
+## Question 11
+
+```{r, include=FALSE}
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+age1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "1", Age = 21, SibSp = 1), se.fit=TRUE)
+age2 <- pred_xb$fit
+
+age2 - age1
+
+100 * (exp(age2 - age1) - 1)
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+age1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "1", Age = 21, SibSp = 1), se.fit=TRUE)
+age2 <- pred_xb$fit
+
+age2 - age1
+
+100 * (exp(age2 - age1) - 1)
+
+```
+
+For a one year increase in age for men, the expected or average change in log-odds of survival is \textbf{-0.061.}
+
+For a one year increase in age for men, the expected or average percent change in odds of survival is \textbf{-5.918}
+
+For a one year increase in age for women, the expected or average change in log-odds of survival is \textbf{-0.034.}
+
+For a one year increase in age for women, the expected or average percent change in odds of survival is \textbf{-3.348}
+
+## Question 12
+
+```{r, include=FALSE}
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+class1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "3", Age = 20, SibSp = 1), se.fit=TRUE)
+class3 <- pred_xb$fit
+
+class3 - class1
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+class1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "3", Age = 20, SibSp = 1), se.fit=TRUE)
+class3 <- pred_xb$fit
+
+class3 - class1
+```
+
+The estimated change in the log-odds of survival having a third-class ticket relative to a first-class ticket if the individual is female is \textbf{-3.905.}
+
+The estimated change in the log-odds of survival having a third-class ticket relative to a first-class ticket if the individual is male is \textbf{-2.23.}
+
+
+## Appendix
+
+```{r, eval=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(bestglm)
+library(car)
+library(pROC)
+library(knitr)
+```
+
+
+```{r, eval=FALSE}
+dat = read.csv("Titanic_complete.csv", stringsAsFactors = TRUE)
+dat$Pclass = factor (dat$Pclass)
+attach(dat)
+```
+
+
+```{r, eval=FALSE}
+logistic_reg_model = glm(Survived~Pclass + Sex + Age + SibSp + Parch +
+                           Fare + Embarked, data=dat,family="binomial")
+
+summary(logistic_reg_model)
+vif(logistic_reg_model)
+
+
+var.select = bestglm(dat,IC="BIC",family=binomial,
+                     method = "exhaustive")
+var.select$BestModel
+
+best_model = glm(Survived ~ Pclass + Sex + Age + SibSp, 
+                 data=dat, family="binomial")
+
+summary(best_model)
+
+best_model$coefficients                   
+round(exp(best_model$coefficients),3)     
+100 * (exp(best_model$coefficients) - 1) 
+```
+
+
+```{r, eval=FALSE}
+avPlots(best_model)
+scatter.smooth(Pclass,Survived,xlab="Pclass",ylab="Survived",pch=19)
+scatter.smooth(Sex,Survived,xlab="Sex",ylab="Survived",pch=19)
+scatter.smooth(Age,Survived,xlab="Age",ylab="Survived",pch=19)
+scatter.smooth(SibSp,Survived,xlab="SibSp",ylab="Survived",pch=19)
+```
+
+
+```{r, eval=FALSE}
+model_glm = glm(Survived ~ Pclass + Sex + Age + SibSp, 
+                data = dat , family = binomial )
+BIC(model_glm)
+model_glm_poly = glm(Survived ~ Pclass + Sex + poly(Age,3) + 
+                       SibSp, data = dat , family = binomial)
+BIC(model_glm_poly)
+model_glm_int = glm(Survived ~ Pclass + Sex + Age + SibSp + 
+                      Sex*Pclass, data = dat , family = binomial )
+BIC(model_glm_int)
+model_glm_int2 = glm(Survived ~ Pclass + Sex + Age + SibSp + 
+                       Pclass*Sex + Age*Sex, data = dat , family = binomial )
+BIC(model_glm_int2)
+```
+
+
+```{r, eval=FALSE}
+pred.probs = predict.glm(model_glm_int,type="response")
+cutoff = 0.5 
+
+preds = pred.probs > cutoff                   
+preds = 1 * (pred.probs > cutoff)             
+preds = ifelse(pred.probs > cutoff,1,0)         
+
+conf.mat = table(preds,dat$Survived)           
+
+
+misclass_rate = 1 - sum(diag(conf.mat)) / sum(conf.mat)  
+ 
+
+
+n_cutoff = 100
+cutoff = seq(0.05,0.95,length=n_cutoff)
+misclass_rate = rep(0,n_cutoff)
+sensitivity = rep(0,n_cutoff)
+specificity = rep(0,n_cutoff)
+
+for(i in 1:n_cutoff){
+preds = 1 * (pred.probs > cutoff[i])              
+conf.mat = table(preds,dat$Survived)                  
+misclass_rate[i] = 1 - sum(diag(conf.mat))/sum(conf.mat)   
+sensitivity[i] = conf.mat[2,2] / (conf.mat[2,2] + conf.mat[1,2]) 
+specificity[i] = conf.mat[1,1] / (conf.mat[1,1] + conf.mat[2,1]) 
+}
+
+plot(cutoff,misclass_rate,type="l",ylab="Misclassification Rate",xlab="Cutoff")
+abline(v = cutoff[which.min(misclass_rate)])
+
+
+cutoff[which.min(misclass_rate)]  
+
+# sensitivity
+
+conf.mat[2,2] / (conf.mat[2,2] + conf.mat[1,2])   
+
+# specificity 
+
+conf.mat[1,1] / (conf.mat[1,1] + conf.mat[2,1]) 
+
+### Brier Score
+
+mean((pred.probs - dat$Survived)^2)
+
+# AUC
+my.roc = roc(dat$Survived,pred.probs)
+auc(my.roc)
+```
+
+
+```{r, eval=FALSE}
+CI = confint(model_glm_int2) 
+round(exp(CI[6,]),3)    
+```
+
+
+```{r, eval=FALSE}
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+age1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "1", Age = 21, SibSp = 1), se.fit=TRUE)
+age2 <- pred_xb$fit
+
+age2 - age1
+
+100 * (exp(age2 - age1) - 1)
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+age1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "1", Age = 21, SibSp = 1), se.fit=TRUE)
+age2 <- pred_xb$fit
+
+age2 - age1
+
+100 * (exp(age2 - age1) - 1)
+```
+
+
+```{r, eval=FALSE}
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+class1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "female", Pclass = "3", Age = 20, SibSp = 1), se.fit=TRUE)
+class3 <- pred_xb$fit
+
+class3 - class1
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "1", Age = 20, SibSp = 1), se.fit=TRUE)
+class1 <- pred_xb$fit
+
+pred_xb <- predict.glm(model_glm_int2, 
+                       newdata = list(Sex = "male", Pclass = "3", Age = 20, SibSp = 1), se.fit=TRUE)
+class3 <- pred_xb$fit
+
+class3 - class1
+```

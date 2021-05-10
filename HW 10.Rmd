@@ -1,0 +1,286 @@
+---
+title: "HW 10"
+output: pdf_document
+author: "Kade Peacock"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+studioc <- read.csv("StudioC.csv", header = T)
+library(forecast)
+attach(studioc)
+```
+
+## Question 1
+
+We are interested in analyzing the popularity of the show Studio C so that we can predict how popular it will be in the future. 
+
+## Question 2
+
+```{r}
+plot(studioc$Week, Google_index ,type = "l",
+ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+abline(v = (1:4) * 26 - 15, col = "red",lwd = 1,lty = 2)
+
+forecast::Acf(Google_index, main = "", cex.lab = 1.4,
+lag.max = 30, ylab = "ACF")
+forecast::Acf(Google_index, main = "", cex.lab = 1.4,
+lag.max = 30, ylab = "PACF", type = "partial")
+
+residual_use = resid(lm(Google_index ~ Week))
+
+plot(0:25,tapply(residual_use,1:(101) %% 26, mean),
+ylab = "avg residual",xlab = "week",
+cex.lab = 1.4)
+```
+
+Regression methods are appropriate for the data. This is a very obvious time-series problem and the majority of the patterns observed are expected and needed to conduct proper regression analysis. There is evidence of seasonality. It is seen in the ACF plot where the correlation goes down and then rises again before falling once more. If there was no seasonality, the correlation would decrease as time went on and it would be very high at the beginning and then stay low for the rest of the points but since it rises and falls in a symmetrical fashion, it is seasonal. The other thing to note about the correlation is that the majority of the coefficients are above the threshold of significant correlation.
+
+## Question 3
+
+```{r}
+attach(studioc)
+head(studioc)
+
+## Plot the Data with markers every 26 Weeks
+
+par(mar = c(5,5,1,1))
+plot(Week,Google_index,type = "l",
+     ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+abline(v = (1:4) * 26 - 15, col = "red",lwd = 1,lty = 2)
+
+
+lm_mod = lm(Google_index ~ Week)
+
+summary(lm_mod)
+X_t_season = model.matrix(lm_mod)[,-1]
+
+
+Google_ts = ts(Google_index,frequency = 26)
+```
+
+```{r}
+###### ###### ###### ###### ###### 
+###### AR(1)
+###### ###### ###### ###### ###### 
+
+
+ar1_simp = forecast::Arima(Google_ts,order = c(1, 0, 0),
+                           xreg = X_t_season)
+
+###### plot fit
+
+par(mar = c(5,5,1,1))
+plot(Week,Google_index,type = "l",lwd = 2,
+     ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+lines(Week,ar1_simp$fitted,col = "red",lty = 1,lwd = 2)
+
+```
+
+```{r}
+###### ###### ###### ###### ###### 
+###### MA(1)
+###### ###### ###### ###### ###### 
+
+ma1_simp = forecast::Arima(Google_ts,order = c(0, 0, 1),
+                           xreg = X_t_season)
+
+par(mar = c(5,5,1,1))
+plot(Week,Google_index,type = "l",lwd = 2,
+     ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+lines(Week,ma1_simp$fitted,col = "red",lty = 1,lwd = 2)
+
+Acf(ma1_simp$residuals,ylab = "ACF of Residuals",cex.lab = 1.4)
+
+```
+
+```{r}
+###### ###### ###### ###### ###### 
+##### ARMA(1,1)
+###### ###### ###### ###### ###### 
+
+arma1_simp = forecast::Arima(Google_ts,order = c(1, 0, 1),
+                             xreg = X_t_season)
+
+
+
+### plot the fit
+
+par(mar = c(5,5,1,1))
+plot(Week,Google_index,type = "l",lwd = 2,
+     ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+lines(Week,arma1_simp$fitted,col = "red",lty = 1,lwd = 2)
+
+### ACF of residuals
+
+Acf(arma1_simp$residuals,ylab = "ACF of Residuals",cex.lab = 1.4)
+
+```
+
+
+```{r}
+###### ###### ###### ###### ###### 
+##### ARIMA(1,1,1)
+###### ###### ###### ###### ###### 
+
+arima1_simp = forecast::Arima(Google_ts,order = c(1, 1, 1),
+                              xreg = X_t_season)
+
+### plot the fit
+
+par(mar = c(5,5,1,1))
+plot(Week,Google_index,type = "l",lwd = 2,
+     ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+lines(Week,arima1_simp$fitted,col = "red",lty = 1,lwd = 2)
+
+### ACF of residuals
+
+Acf(arima1_simp$residuals,ylab = "ACF of Residuals",cex.lab = 1.4)
+
+```
+
+```{r}
+##### SARIMA(1,1,1)
+
+
+lm_mod_simp = lm(Google_index ~ Week)
+
+X_t_simp = model.matrix(lm_mod_simp)[,-1]
+
+
+sarima1_simp = forecast::Arima(Google_ts,order = c(1, 1, 1),
+                              seasonal = list(order = c(1,1,1),period = 26),
+                              xreg = X_t_simp)
+
+### plot the fit.
+
+par(mar = c(5,5,1,1))
+plot(Week,Google_ts,type = "l",lwd = 2,
+     ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+lines(Week,sarima1_simp$fitted,col = "red",lty = 1,lwd = 2)
+
+### ACF of residuals
+
+Acf(sarima1_simp$residuals,ylab = "ACF of Residuals",cex.lab = 1.4)
+```
+
+```{r}
+## Find the best model
+BIC(lm_mod)
+ar1_simp$bic
+ma1_simp$bic
+arma1_simp$bic
+arima1_simp$bic
+sarima1_simp$bic
+```
+
+```{r}
+## Find the best model
+AIC(lm_mod)
+ar1_simp$aic
+ma1_simp$aic
+arma1_simp$aic
+arima1_simp$aic
+sarima1_simp$aic
+```
+It seems that the SARIMA $(1,1,1)*(1,1,1)_{26}$ model best fits the data since it provides us with the lowest AIC and BIC values in comparison to the other models. 
+
+## Question 4
+
+The best model is the SARIMA $(1,1,1)*(1,1,1)_{26}$ model and though it was plotted above, we will plot it again and discuss:
+
+```{r}
+#SARIMA(1,1,1)
+lm_mod_simp = lm(Google_index ~ Week)
+X_t_simp = model.matrix(lm_mod_simp)[,-1]
+
+sarima1_simp = forecast::Arima(Google_ts,order = c(1, 1, 1), seasonal = list(order = c(1,1,1),period= 26), xreg = X_t_simp)
+
+par(mar = c(5,5,1,1))
+plot(Week,Google_ts,type = "l",lwd = 2,
+    ylab = "Google Index",xlab = "Week",cex.lab = 1.4)
+
+lines(Week,sarima1_simp$fitted,col = "red",lty = 1,lwd = 2)
+
+### ACF of residuals
+
+Acf(sarima1_simp$residuals,ylab = "ACF of Residuals",cex.lab = 1.4)
+```
+As you can see, the red line (which is our model) very closely follows the trends of the black line (actual observed data). In fact, the lowest quarter of the data where it looks like there is no black line looks like that because the red line sits on top of it perfectly. This is a wonderful sign because the closer our model fits to the data, the more accurate it will be at making future predictions.
+
+
+
+## Question 5
+
+\textbf{Independence}
+```{r}
+Acf(sarima1_simp$residuals)
+```
+
+This plot shows the correlation between Google Index each week. As you can see, there are no clear patters in the correlation coefficients which means we can assume that Independence is met.
+
+\textbf{Normality (of residuals)}
+```{r}
+hist(sarima1_simp$residuals/sd(sarima1_simp$residuals),
+freq = FALSE,breaks = 20)
+curve(dnorm(x),from = -4,to = 4,add = TRUE)
+
+qqnorm(sarima1_simp$residuals[-c(1:26)]/sd(sarima1_simp$residuals[-c(1:26)]))
+abline(0,1,col = "red",lwd = 2,lty = 2)
+
+```
+
+In looking at the histogram, we can see that there are normal trends. The bins on the plot are very close to following the normal curve aside from perhaps some outliers on the far right side.
+In looking at the QQ plot, we can see that the data points all hover around that red dashed line, only sliding away from in on the very edges which is a common phenomenon. 
+Because both of these plots show the trends we expected, we can assume that normality is met. 
+
+\textbf{Equal Variance}
+```{r}
+scatter.smooth(sarima1_simp$fitted, sarima1_simp$residuals,
+pch = 20,
+main = 'Residuals vs Fitted Values',
+xlab = 'Fitted Values', ylab = 'Residuals')
+abline(h = 0, lwd = 2, col = 'red', lty = 2)
+legend('topright', legend = c('Actual Mean', "Mean (if Equal Variance)"),
+col = c('black', 'red'), lty = c(1,2), lwd = c(1,2))
+```
+
+In order to determine equal variance, we are looking at this plot of the residuals. The goal is to have the data points hover around the red line. Unfortunately, this assumption isn't being met very well. Although our data appears to not really have equal variance, the relationship isn't awful and for simplicity's sake, we will assume that it is met.
+
+
+## Question 6
+```{r}
+Google.test = Google_ts[-(1:75)]
+Google.train = Google_ts[1:75]
+
+train.mod = forecast::Arima(Google.train,
+                            order = c(1, 1, 1),
+                            seasonal = list(order = c(1,1,1),period = 26),
+                            xreg = X_t_simp[1:75])
+
+pred = forecast::forecast(train.mod,h = 26,
+                          xreg = X_t_simp[-(1:75)])
+
+sqrt(mean((Google.test - pred$mean)^2)) ### RPMSE
+mean(pred$mean - Google.test)           ### bias
+```
+
+Predictions of StudioC Google searches given a particular week were off by 8.53 searches on average. 
+
+Predictions of StudioC Google searches given a particular week were about 3.37 searches too low. 
+
+## Question 7
+```{r}
+par(mar = c(4,4,1,1))
+plot(pred,xlab = "Week",ylab = "Google Index",cex.lab = 1.4,
+     ylim = c(0,150),xlim = c(0,101))
+```
+
+The model predicts that Google searches during the next season will hold a pattern similar to previous seasons. However, there is increasing uncertainty as time progresses. 

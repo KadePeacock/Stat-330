@@ -1,0 +1,122 @@
+---
+title: "HW 9"
+author: "Kade Peacock"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+load("Bikes.RData")
+library(car)
+library(bestglm)
+```
+
+## Question 1
+
+We are interested in analysing the daily trends of bike rentals. We will look at the impact that different factors might have on how many bikes are rented each day in order to come up with a model that can make accurate predictions for us. Once we have this model, we can predict how many bikes will be rented on a given day based on environmental and season settings, factors that are much easier to predict/know ahead of time.
+
+## Question 2
+
+Multiple linear regression isn't the best fit for this data because the y variable is count data and our MLR assumptions will likely be violated.
+
+```{r, echo= F}
+scatter.smooth(bikes$season, bikes$cnt, xlab="Season", ylab="cnt", pch=19)
+scatter.smooth(bikes$yr, bikes$cnt, xlab="Year", ylab="cnt", pch=19)
+scatter.smooth(bikes$holiday, bikes$cnt, xlab="Holiday", ylab="cnt", pch=19)
+scatter.smooth(bikes$workingday, bikes$cnt, xlab="Working Day", ylab="cnt", pch=19)
+scatter.smooth(bikes$weathersit, bikes$cnt, xlab="Weather", ylab="cnt", pch=19)
+scatter.smooth(bikes$temp, bikes$cnt, xlab="Temperature", ylab="cnt", pch=19)
+scatter.smooth(bikes$hum, bikes$cnt, xlab="Humitidy", ylab="cnt", pch=19)
+```
+
+## Question 3
+
+```{r}
+poiss_model <- glm(cnt~.,data=bikes,family = "poisson")
+
+summary(poiss_model)
+vif(poiss_model)
+```
+
+As a first step to determining which covariates we can and can't use, we had a look at the summary (to look at p-values and determine significance) as well as VIF (too see if any surpassed 10). 
+In looking at the summary, it appears that all of the covariates are significant, meaning that they will all likely be included in the model. 
+In looking at the VIF, there are no values over 10 so none can be ruled out for the purpose of colinearity.
+
+```{r}
+var_select <- bestglm(bikes, IC="AIC", family = poisson, method = "forward")
+var_select$BestModel
+
+100*(exp(coef(poiss_model))-1)
+```
+When we run the AIC, R determines that all of the covariates should be used in the model. This is what we expected because of the summary evaluation we just did. We chose to use AIC because generally, AIC is used when you are trying to make predictions with your data while BIC is used to make inferences with the data. At the beginning of this process, we stated that our goal was to make predictions with our data, so AIC was a better fit for our goals.
+
+## Question 4
+
+$$ log(\mu_i) = { \beta_0 + \sum_{p=1}^{P} {x_{ip}\beta_p} } $$
+
+$$
+log(\mu_i) =  \beta_0 + \beta_1I(Group = Summer) + \beta_2I(Group = Fall) + \beta_3I(Group = Winter) + \\
+\beta_4I(Group = 2012) + \beta_5I(Group = holiday) +\beta_6I(Group = workingday) + \beta_7I(Group=Misty) + \\ 
+\beta_8I(Group=LightPrecip) + \beta_9(temp) +\beta_{10}(hum) + \beta_{11}(windspeed) \\
+y_i \overset{ind}{\sim} \mathrm{Pois}(\mu_i)
+$$
+
+* Assumptions
+
+The assumptions we are making are Linear in log-mean, Independence and Poisson Distributed.
+
+Linearity in log mean can be determined by looking at added-variable plots and checking to see if the trends of the points are lienar and follow the mean line on the graph. An AV-plot will fail linearity if it clearly has a curve in the trends of the points that is different from the trend of the straight line.
+
+```{r}
+avPlots(poiss_model,terms = ~ season)
+avPlots(poiss_model,terms = ~ yr)
+avPlots(poiss_model,terms = ~ holiday)
+avPlots(poiss_model,terms = ~ workingday)
+avPlots(poiss_model,terms = ~ weathersit)
+avPlots(poiss_model,terms = ~ temp)
+avPlots(poiss_model,terms = ~ hum)
+avPlots(poiss_model,terms = ~ windspeed)
+```
+
+There are no clear violations of linearity except for the trends on season. Those ones appear to be a little bit curved; dipping in the middle and turning up on either end. These aren't so drastic that we can't meet the linearity assumption but it is something to keep an eye on.
+
+We assume the data are distributed as Poisson random variable because they are count data.
+
+Independence means that the data from one day doesn't effect the data from the next day. We recognize that the number of bikes rented one day might effect the number of bikes rented the next becuase people might see other with bikes and want them or have a hard time renting a bike on one day and so not bother on the next. We are measuring a lot of variables though and we are trying to come up witha simple model and so we will choose to ignore these technicalities and assume that the number of bikes rented on one day is independent of the number of bikes rented on any other days and solely related to the covariates we are accounting for.
+
+## Question 5
+
+$$ 
+log(\mu_i) = {7.53 + 0.34I(Group = Summer) + 0.25I(Group = Fall) + 0.46I(Group = Winter) + 
+\\ 0.46I(Group = 2012) - 0.17I(Group = holiday) + 0.03I(Group = workingday) - 
+\\ 0.10I(Group=Misty) - 0.73I(Group=LightPrecip) + 1.22(temp) - 0.25(hum) - 0.57(windspeed) } 
+$$
+
+
+
+```{r}
+100*(exp(confint(poiss_model))-1)
+```
+
+According to our model, we are 95% confident that while holding all else constant the estimated percent change in the log(cnt) (number of bike rentals) when the season is summer is between 40.44% and 41.69%. 
+
+## Question 6
+```{r}
+pred_xb = predict.glm(poiss_model,
+                      newdata = list(season = "Spring", yr = "2012", holiday = "No", 
+                                     workingday = "Yes", weathersit = "Misty", temp = 0.34, 
+                                     hum = 0.8, windspeed = 0.18), se.fit=TRUE)
+
+pred_xbupper1 = pred_xb$fit + 1.96*pred_xb$se.fit
+pred_xblower1 = pred_xb$fit - 1.96*pred_xb$se.fit
+
+conf_int = c(pred_xblower1,pred_xbupper1)
+
+conf_interval_prob = poiss_model$family$linkinv(conf_int)
+
+conf_interval_prob
+```
+
+According to our model, we are 95% confident that the average number of bikes rented for this day is between 3,055.591 and 3,078.171. 

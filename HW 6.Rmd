@@ -1,0 +1,269 @@
+---
+title: "HW 6"
+output: pdf_document
+author: "Kade Peacock"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=F}
+library(car)
+library(bestglm)
+library(leaps)
+```
+## Question 1:
+
+Our main goal is to determine the cause of economic growth for a country. In order to do so, we will fit a model to our data and analyse its trends. As part of the process, we will likely choose to ignore some variables that seem to be irrelevant or insignificant in affecting the economic growth of a country. We will also conclude that some of the variables are significant and do influence the economic growth of a coutnry. Once we have determined which variables these are, we will determine what type of affect they have. With our completed model, we should be able to predict the economic growth of a country, based on the 48 (or fewer) variables we decide are relevant, with a reasonable accuracy.
+
+## Question 2:
+
+```{r}
+gdp <- read.csv("gdp_sub.csv", header = TRUE)
+lm_gdp <- lm(y~.,data=gdp)
+
+vif_values <- vif(lm_gdp)
+vif_values
+
+barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue")
+abline(v = 10, lwd = 3)
+
+lm_gdp_mod <- lm(y ~ ABSLATIT + AIRDIST + AVELF + BUDDHA + CIV72 + COLONY + CONFUC 
+                 + DENS60 + DENS65C + DENS65I + DPOP6090 + EAST + ECORG + EUROPE 
+                 + FERTLDC1 + GDPCH60L + GEEREC1 + H60 + HERF00 + IPRICE1 + 
+                   LAAM + LANDLOCK + LIFE060 + LT100CR + MALFAL66 + NEWSTATE + 
+                   OPENDEC1 + OTHFRAC + P60 + PRIGHTS + POP1560 + POP60 + POP6560 
+                 + PRIEXP70 + RERD + REVCOUP + SAFRICA + SIZE60 + SPAIN + TROPICAR 
+                 + TROPPOP + WARTIME + WARTORN + YRSOPEN + ZTROPICS, data = gdp)
+
+vif_values_mod <- vif(lm_gdp_mod)
+barplot(vif_values_mod, main = "VIF Values MOD", horiz = TRUE, col = "steelblue")
+abline(v = 10, lwd = 3)
+
+mean(vif_values >10)
+```
+
+First, we found the VIFs. In order to visualize their values, we put them into a bar graph. Unfortunately, we had 3 predictor variables that are significantly larger than the others so we made a second graph with those 3 variables excluded simply so that we could get a better look at the other data.
+
+We know that if a variable has a VIF of over 10, it poses an issue because it indicates a potentially severe correlation between a given predictor variable and another predictor variable. This relationship between variables is called collinearity. If collinearity is present, the coefficient estimates and p-values in the regression output would likely be unreliable.
+
+Because this "10" value is so significant, we put a line on the graph at 10. Any bars past the 10 line indicate a VIF that is potentially problematic while any bars before 10 indicate a VIF that is within the correct range. As you can see, many of the bars are past 10. 
+
+Lastly, we calculated the exact proportion of predictor variables that are collinear by summing them and dividing by the total 48 variables. We got a value of 45.83%. This means that around 46% of our variables potentially pose a problem for analysis.
+
+## Question 3 
+
+We aren't going to use all 48 variables in our final model so we need to come up with the best model to fit the data and make accurate predictions. We can try various variable combinations in 3 ways: Exhaustive selection, Forward selection and Backward selection.
+
+Exhaustive selection, in theory, is the best method because it means we would go through and look at every single possible model and determine which one is the best. However, in reality this is not such a good idea. This is because there are 2^48 (a very big number) of possibilities so it's just not computationally feasible to look at every single one of those models.
+
+Forward selection requires starting off with no predictor variables and then adding one at a time to see if adding another variable creates a better or worse model, stopping when it seems to reach an optimal point. This approach is much more fasible than the exhaustive method.
+
+Backward selection requires starting off with all 48 predictor variables and then removing them one at a time to see if removing another variable creates a better or worse model, stopping when it seems to reach an optimal point. Like the forward selection method, this approach is much more feasible than the exhaustive method.
+
+
+```{r}
+lm_gdp_mod <- lm(y ~ ABSLATIT + AIRDIST + AVELF + BUDDHA + CIV72 + COLONY + CONFUC 
+                 + DENS60 + DENS65C + DENS65I + DPOP6090 + EAST + ECORG + EUROPE 
+                 + FERTLDC1 + GDPCH60L + GEEREC1 + H60 + HERF00 + IPRICE1 + LAAM 
+                 + LANDLOCK + LIFE060 + LT100CR + MALFAL66 + NEWSTATE + OPENDEC1 
+                 + OTHFRAC + P60 + PRIGHTS + POP1560 + POP60 + POP6560 + PRIEXP70 
+                 + RERD + REVCOUP + SAFRICA + SIZE60 + SPAIN + TROPICAR + TROPPOP 
+                 + WARTIME + WARTORN + YRSOPEN + ZTROPICS, data = gdp)
+vif(lm_gdp_mod)
+vif_values_mod <- vif(lm_gdp_mod)
+barplot(vif_values_mod, main = "VIF Values", horiz = TRUE, col = "steelblue")
+abline(v = 5, lwd = 3)
+```
+
+## Question 4 
+
+We are going to use the forward selection method to determine the best variables to use to create our model. We are going to use the Bayesian Information Criterion because in general, BIC models have fewer variables and simpler models than AIC models. We are also hoping to make some inferences with our models.
+```{r}
+Xy <- gdp[,c(2:ncol(gdp),1)]
+var_select <- bestglm(Xy, IC="BIC", method = "forward", TopModel = 10)
+my.best.lm <- var_select$BestModel
+which.min(var_select$Subsets$BIC)
+```
+After running the code to determine the best model to choose, we ran a line that tells us the minimum BIC value, which is 10. This is because in order to determine which is the best subset selection, we need to determine which set minimizes BIC. Now that we know that, we can highlight the 10th point on our plot and it's a lot easier to see that it is the right choice.
+```{r}
+plot(var_select$Subsets$BIC, type = "b", pch = 19, xlab = "# of vars", ylab = "BIC")
+points(10, 27.00166, col="red", pch = 19)
+summary(var_select$BestModel)
+confint(var_select$BestModel)
+```
+As you can see in our summary, we are now down to 9 variables along with the intercept. Also, all but one of our variables are significant (meaning the p-value is less than 0.05). Because YRSOPEN isn't significant, we aren't going to include it in our model going forward. This is our new data frame that only includes the predictor variables that are relevant. Note that all are quantitative besides EAST and SPAIN which are categorical/binary/dummy variables.
+```{r}
+new_GDP <- data.frame("y" = gdp$y, "EAST" = gdp$EAST, "GDPCH60L" = gdp$GDPCH60L, 
+                      "IPRICE1" = gdp$IPRICE1, "LIFE060" = gdp$LIFE060, 
+                      "MALFAL66" = gdp$MALFAL66, "OTHFRAC" = gdp$OTHFRAC, 
+                      "P60" = gdp$P60, "SPAIN" = gdp$SPAIN)
+```
+
+
+
+
+
+## Question 5 
+$$
+y_i = \beta_0 + \sum_{p=1}^8 x_{ip} \beta_p + \epsilon_i
+$$
+
+$$y_i = \beta_0 + \beta_1I(Group = EAST) + \beta_2(GDPCH60L) + \beta_3(1PRICE1) + \beta_4(LIFE060) + $$ $$\beta_5(MALFAL66) + \beta_6(OTHFRAC) + \beta_7(P60) + \beta_8I(Group = SPAIN)$$
+Assumptions:
+
+We are assuming Linearity, Independence, Normality and Equal Variance for our model. 
+
+\textbf{Interpretations:}
+
+$y_i$ This is the response variable. 
+In general, it represents an estimate outcome value based on the values we plug into the predictor variable slots of our model. 
+In this particular model, $y_i$ represents estimated economic growth for a country based on the 8 predictor variables we have chosen (EAST, GDPCH60L, 1PRICE1, LIFE060, MALFAL66, OTHFRAC, P60 and SPAIN).
+
+$\beta_0$ This is the intercept coefficient. 
+In general, it is the $y_i$ value if all of the predictor variables are zero. It's called the intercept coefficient because it sits right on the y-axis (all x values are 0). In this particular model, $\beta_0$ represents the estimated economic growth of a country with zero GDPCH60L, 1PRICE1, LIFE060, MALFAL66, OTHFRAC and P60 that is also not an east Asian country or a former Spanish colony.
+In reality, it would be impossible for a country to measure zero in all of these areas simultaneously so this is merely a theoretical number.
+
+$\beta_1$ This is the slope coefficient for the first predictor variable. (one of the binary/dummy variables)
+In general, it indicates that solely based on its condition being met, the response variable should increase(or decrease) by a value of 
+
+$\beta_1$. This is to ensure that the response variable will be placed in the right spot on the graph to make an accurate estimate.
+In this particular model, $\beta_1$ is the coefficient for the EAST variable. This means that if a country is an east Asian country, it's economic growth is expected to increase by $\beta_1$ based on that fact alone.
+
+$\beta_2$ This is the slope coefficient for the second predictor variable. (one of the quantitative variables)
+In general, it indicates the intensity of the effect that a specific variables' input will have on the response variable. It will cause the input to be multiplied by the right high, low, positive or negative number to ensure that the response variable will be placed in the right spot on the graph to make an accurate estimate.
+In this particular model, $\beta_2$ is the coefficient for the GDPCH60L variable (the logarithm of gdp per capita in 1960) This means that a country's GDPCH60L value must be multiplied by $\beta_2$ and then added to the model in order to predict economic growth.
+
+\textbf{Discussion:}
+
+Fitting the data means assigning values to all the $\beta_i$ which will give us a shell so that when we plug in a country's particular values for each predictor variable, we can get an accurate estimate of its economic growth. We will determine these $\beta_i$ by looking at the trends of countries whose Growth of GDP per capita between 1960 and 1966(economic growth) is known and then we can apply the same patterns to those whose economic growth is not known or those countries in differnet time frames.
+
+## Question 6 
+
+\begin{align}
+\widehat{y}&=5.963+1.804I(Group = EAST)-1.025(GDPCH60L)-0.008(IPRICE1)+0.051(LIFE060)\\
+           &-1.321(MALFAL66)+0.80(OTHFRAC)+1.8779990(P60)-1.371I(Group = SPAIN)
+\end{align}
+
+```{r}
+my_est=coef(my.best.lm)
+my_ci=confint(my.best.lm)
+my_ci=head((my_ci),9)
+knitr::kable(cbind("Estimate" = my_est[1:9], my_ci))
+```
+
+According to our model, we are 95 confident that being in an East Asian country would increase a countries economic growth between 1.0247154 and 2.5833050. 
+
+According to our model, we are 95 confident that if a country's average growth rate of population between 1960 and 1990 increases by 1, then its economic growth would increase between 0.5230362 and 3.2329619.
+
+## Question 7
+
+
+\textbf{1. Linearity}
+
+In order to demonstrate linearity, we will create a graph of residuals and fitted values. We can assume that the data is linear because in looking at the graph, we can see that there are no clear patterns in the spread of the data, the data is centered around the mean line and the mean of the residual is close to zero.
+
+```{r}
+lm_GDP <- lm(y~.,data=new_GDP)
+scatter.smooth(lm_GDP$fitted.values, lm_GDP$residuals,
+pch = 20,
+main = 'Residuals vs Fitted Values',
+xlab = 'Fitted Values', ylab = 'Residuals')
+abline(h = 0, lwd = 2, col = 'red', lty = 2)
+legend('topright', legend = c('Actual Mean', "Mean (if Equal Variance)"),
+col = c('black', 'red'), lty = c(1,2), lwd = c(1,2))
+```
+
+A second way to demonstrate linearity is creating VA plots. each of these plots shows linear trends therefore, we can assume that the data is linear. 
+```{r}
+car::avPlots(lm_GDP)
+```
+
+\textbf{2. Independence}
+
+In order to demonstrate independence, we will look at the graph of residuals that we created when demonstrating linearity. We can assume that the data is independent because in looking at the graph, we can see that there are no clear patterns in the spread of the data.
+
+\textbf{3. Normality}
+
+In order to demonstrate normality, we will use two different graphics and two hypothesis tests:
+
+First, a histogram of the standardized residuals: 
+We can assume that normality is met if the residuals are normally distributed. This happens when the histogram follows the general shape of the normal curve. As we can see in the histogram below, the standardized residuals fit the normal curve relatively well. There are some holes but still, the center has the tallest bars and the tails have the shortest bars with some medium sized bars in the middle, therefore the assumption of normality seems to be met.
+```{r}
+# Compute the standardized residuals
+lm_GDP$std.res = MASS::stdres(lm_GDP)
+
+# Plot the histogram of the standardized residuals 
+hist(lm_GDP$std.res, freq = FALSE, breaks = 18,
+main='Histogram of Standardized Residuals', xlab='Standardized Residuals')
+curve(dnorm, from = -3, to = 3, add = TRUE, col = 'red')
+```
+
+Second, the Quantile-Quantile (QQ) plot of the standardized residuals:
+
+We can assume that normality is met if the points in the QQ plot hug the red line. 
+As we can see in the plot below, the points almost perfectly hug the red line except for the edges, where there are a few outliers. and there are only a few outliers at the edges that deviate from normal. Therefore the assumption of normality is met.
+```{r}
+# Plot the Quantile-Quantile Plot of the standardized residuals
+qqnorm(lm_GDP$std.res, pch = 20, main='QQ Plot of Standardized Residuals')
+abline(a=0,b=1, col='red')
+```
+
+Third, hypothesis tests:
+
+In order to ensure that our assumptions are sound, we will conduct 2 hypothesis tests. 
+
+The first test, the Kolmogorov-Smirnov (KS) test: 
+
+\text{$H_0$: Residuals come from a normal distribution}
+
+\text{$H_1$: Residuals do not come from a normal distribution}
+
+We conduct the KS test in the code below:
+```{r}
+ks.test(lm_GDP$std.res,"pnorm")
+```
+
+The KS test returns a p value of 0.7511. This value is greater than 0.05 which means that we fail to reject the null hypothesis. This means that we do not have sufficient evidence to reject the idea that the residuals have a normal distribution. In fact, the p-value is very close to 1, suggesting that the distribution we see in our residuals is very likely to reflect that of a normal distribution.
+
+The second hypothesis test, the Jaque-Bera (JB) test:
+
+\text{$H_0$: The skewness and kurtosis of the data match those of a normal distribution}
+
+\text{$H_1$: The skewness, the kurtosis, or both do not match those of a normal distrbution} 
+
+We conduct the JB test in the code below:
+```{r}
+normtest::jb.norm.test(lm_GDP$std.res, nrepl = 10000)
+```
+
+The JB test returns a p-value of about 0.0039, which means that we have sufficient evidence to reject null hypothesis. This means that we can confidently say that the data isn't actually normal. 
+
+\textbf{4. Equal Variance}
+
+In order to demonstrate equal variance, we will look at the graph of residuals that we created when demonstrating linearity. We can assume that the data has an equal variance because the data is centered around the mean line and the mean of the residual is close to zero.
+
+In order to ensure that our assumptions are sound, we will conduct a Breuch-Pagan test.
+
+The Breusch-Pagan (BP) test
+
+\text{$H_0$ : Residuals are homoskedastic ('equal variance')}
+
+\text{$H_1$ : Residuals are heteroscedastic ('differing variance')}
+
+We conduct the BP test in the code below: 
+```{r}
+lmtest::bptest(lm_GDP)
+```
+The BP test returns a p-value of 0.237. This value is greater than 0.05 which means that we fail to reject the null hypothesis. This means that we do not have sufficient evidence to reject the idea that the residuals are homoskedastic.Therefore, we will conclude that the assumption of equal variance is met.
+
+## Question 8 
+
+```{r}
+summary <- summary(lm_GDP)
+summary$adj.r.squared
+```
+
+Our multiple $R^2$ value is equal to 0.73. This means that 73% of the variation in economic growth can be explained by these eight variables (EAST, GDPCH60L, IPRICE1, LIFE060, MALFAL66 OTHFRAC P60, and SPAIN). This is an exceptional coefficient of determination, and suggests that our model is accurate in estimating a country's economic growth. 

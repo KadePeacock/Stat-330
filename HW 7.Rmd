@@ -1,0 +1,123 @@
+---
+title: "HW 7"
+output: pdf_document
+author: "Kade Peacock" 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(splines)
+snow_dat <- read.csv("snow_core.csv")
+```
+
+## Question 1
+
+The goal is to understand the snow density processes in Antarctica so that we can evaluate the earth of the earth's largest fresh water reservoir. One of the things we need to determine is if each core sample needs it's own mean function or whether we can use one curve to model the trends of all the cores. 
+
+## Question 2
+
+The explanitory variables are the depth and core while the outcome is the density.
+
+## Question 3 
+
+```{r}
+linear_mod <- lm(Density ~ Depth + Core, data = snow_dat)
+linear_mod_int <- lm(Density ~ Depth * Core, data = snow_dat)
+
+AIC(linear_mod)
+AIC(linear_mod_int)
+
+summary(linear_mod)$r.squared
+summary(linear_mod_int)$r.squared
+```
+
+The better model is the linear model with interaction. We know this because it has a significantly lower AIC value.
+
+79.96% of the variance in the linear model without interaction can be explained by the covariates chosen.
+
+80.52% of the variance in the linear model with interaction can be explained by the covariates chosen.
+
+## Question 4 
+
+```{r}
+poly_mod <- lm(Density ~ poly(Depth,degree=3) + Core, data = snow_dat)
+poly_mod_int <- lm(Density ~ poly(Depth,degree=3) * Core, data = snow_dat)
+
+AIC(poly_mod)
+AIC(poly_mod_int)
+
+summary(poly_mod)$r.squared
+summary(poly_mod_int)$r.squared
+```
+The better model is the polynomial model with interaction. We know this because it has a significantly lower AIC value than the model without interaction.
+
+87.05% of the variance in the polynomial model without interaction can be explained by the covariates chosen.
+
+87.47% of the variance in the polynomial model with interaction can be explained by the covariates chosen.
+
+## Question 5 
+
+```{r}
+knot_loc <- median(snow_dat$Depth)
+
+spline_mod <- lm(Density ~ bs(Depth,degree=3, knots = knot_loc) + Core, data = snow_dat)
+spline_mod_int <- lm(Density ~ bs(Depth,degree=3, knots = knot_loc) * Core, data = snow_dat)
+
+AIC(spline_mod)
+AIC(spline_mod_int)
+
+summary(spline_mod)$r.squared
+summary(spline_mod_int)$r.squared
+```
+The better model is the spline model with interaction. We know this because it has a significantly lower AIC value than the model without interaction.
+
+
+87.08% of the variance in the spline model without interaction can be explained by the covariates chosen.
+
+87.48% of the variance in the spline model with interaction can be explained by the covariates chosen.
+
+## Question 6 
+
+```{r}
+AIC(linear_mod)
+AIC(linear_mod_int)
+
+AIC(poly_mod)
+AIC(poly_mod_int)
+
+AIC(spline_mod)
+AIC(spline_mod_int) 
+```
+
+The best model out of these 6 is the spline model with interaction. We know this because it has a significantly lower AIC value than all the other models. This indicates that it would be better to model each core separately rather than grouping them together. 
+
+Disadvantages: 
+
+* With splines, sometimes the behavior of the model at the boundaries can be inaccurate.
+
+* Most of the coefficients are hard to interpret.
+
+Advantages:
+
+* Our model is flexible and best reperesents the data in general based on our AIC analysis.
+
+## Question 7 
+
+$\beta_0$ represents the estimated average snow density when depth is 0 and core is reference group (core=1).
+
+## Question 8 
+```{r}
+coef(spline_mod_int)[1]
+
+core1_fit <- predict.lm(spline_mod_int)[snow_dat$Core == 1]
+
+plot(snow_dat$Depth[snow_dat$Core == 1],snow_dat$Density[snow_dat$Core == 1],
+     pch = 19, cex = 0.6, xlab = "Depth (m)", cex.lab = 1.2, main = "Prediction vs Observed for Core 1", 
+     ylab = expression(paste("Density (",g/cm^3,")")),cex.main = 1.8)
+
+lines(snow_dat$Depth[snow_dat$Core == 1], core1_fit, col = "magenta", lwd = 2)
+
+```
